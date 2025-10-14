@@ -12,7 +12,9 @@
     small { opacity: .75; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     textarea { width: 100%; min-height: 240px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 14px; padding: .75rem; border-radius: .5rem; }
-    button { cursor: pointer; padding: .6rem .9rem; border-radius: .6rem; border: 1px solid #8884; background: #eee; }
+    button { cursor: pointer; padding: .7rem 1rem; border-radius: .7rem; border: 1px solid #1e40af; background: #2563eb; color: #fff; font-weight: 600; letter-spacing: .02em; box-shadow: 0 1px 2px #0003; }
+    button:hover { filter: brightness(1.05); }
+    button:disabled { background: #9ca3af; border-color: #9ca3af; color: #1f2937; cursor: not-allowed; }
     button:hover { filter: brightness(0.98); }
     .btns { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 1rem; }
     .card { border: 1px solid #8884; border-radius: .7rem; padding: .8rem; }
@@ -24,9 +26,8 @@
     code { background: #00000010; padding: .15rem .35rem; border-radius: .4rem; }
     footer { margin-top: 2rem; opacity: .8; font-size: .9em; }
   </style>
-
-  <!-- sql.js（WASM）を CDN から読み込み。自前スクリプトより「先」に置くこと！ -->
-  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/sql-wasm.js"></script>
+  <!-- 同梱版 sql.js（SQLiteをWebAssemblyでブラウザ内実行） → リポジトリ直下に sql-wasm.js / sql-wasm.wasm を置く -->
+  <script src="./sql-wasm.js"></script>
 </head>
 <body>
   <header>
@@ -37,10 +38,7 @@
   <div class="row">
     <section class="card">
       <h2 style="margin-top:0">1) クエリを実行</h2>
-      <p class="muted">
-        下のSQLを書き換えて <strong>実行</strong> を押してください。<br>
-        例：<code>SELECT h.text, a.name, k.term, s.name FROM haiku h LEFT JOIN authors a ON h.author_id=a.id LEFT JOIN kigo k ON h.kigo_id=k.id LEFT JOIN seasons s ON k.season_id=s.id;</code>
-      </p>
+      <p class="muted">下のSQLを書き換えて <strong>実行</strong> を押してください。<br>例：<code>SELECT h.text, a.name, k.term, s.name FROM haiku h LEFT JOIN authors a ON h.author_id=a.id LEFT JOIN kigo k ON h.kigo_id=k.id LEFT JOIN seasons s ON k.season_id=s.id;</code></p>
       <textarea id="sqlInput"></textarea>
       <div class="btns">
         <button id="runBtn">▶ 実行（Ctrl/⌘+Enter）</button>
@@ -60,7 +58,29 @@ GROUP BY s.name
 ORDER BY haiku_count DESC;">集計サンプル（季節ごとの句数）</button>
         <button id="resetBtn" title="初期データを入れ直します">🗘 DBリセット</button>
       </div>
-      <p id="status" class="muted">DB初期化待ち…</p>
+
+      <!-- かんたん検索UI -->
+      <div class="card" style="margin-top:.75rem">
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center">
+          <strong>かんたん検索：</strong>
+          <input id="qInput" placeholder="キーワード（例：蛙 / 夏草 / 芭蕉 / 夏）" style="flex:1; min-width:220px; padding:.6rem .7rem; border-radius:.6rem; border:1px solid #8884;">
+          <select id="qType" style="padding:.6rem .7rem; border-radius:.6rem; border:1px solid #8884;">
+            <option value="text">句の本文</option>
+            <option value="author">作者名</option>
+            <option value="kigo">季語</option>
+            <option value="season">季節</option>
+          </select>
+          <button id="qRun">検索</button>
+        </div>
+        <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap">
+          <button class="chip" data-q="蛙" data-type="text">🐸 蛙を含む句</button>
+          <button class="chip" data-q="芭蕉" data-type="author">👤 芭蕉の句</button>
+          <button class="chip" data-q="夏草" data-type="text">☘️ 夏草</button>
+          <button class="chip" data-q="夏" data-type="season">🌞 夏の句</button>
+        </div>
+      </div>
+
+      <p id="status" class="muted">DB初期化待ち…</p> class="muted">DB初期化待ち…</p>
     </section>
 
     <section class="card">
@@ -90,15 +110,15 @@ LEFT JOIN kigo k ON h.kigo_id = k.id
 LEFT JOIN seasons s ON k.season_id = s.id
 ORDER BY h.id;`;
 
-    // DOM
+    // DOM 取得
     const el = (id) => document.getElementById(id);
     const sqlInput = el('sqlInput');
     const result = el('result');
     const status = el('status');
     const schemaView = el('schemaView');
 
-    // sql.js 初期化（WASMの場所をCDNに固定）
-    initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${f}` })
+    // sql.js 初期化（WASMの場所は同じディレクトリ）
+    initSqlJs({ locateFile: file => `./${file}` })
       .then((SQLLib) => {
         SQL = SQLLib;
         db = new SQL.Database();
@@ -109,10 +129,10 @@ ORDER BY h.id;`;
       })
       .catch((e) => {
         console.error(e);
-        status.textContent = 'sql.js の読み込みに失敗しました。 ' + (e && e.message ? e.message : '');
+        status.textContent = 'sql.js の読み込みに失敗しました。';
       });
 
-    // 初期スキーマ＆データ
+    // サンプルデータ投入（俳句用）
     function seed() {
       const schema = `
 PRAGMA foreign_keys = ON;
@@ -178,14 +198,14 @@ INSERT INTO authors(id, name, birth_year, death_year) VALUES
 
 -- 俳句（学習用の少数例、出典略）
 INSERT INTO haiku(id, text, author_id, kigo_id, year, place, note) VALUES
-  (1,  '古池や 蛙飛びこむ 水の音',         201, 101, 1686, '江戸',         '春：蛙'),
-  (2,  '夏草や 兵どもが 夢の跡',             201, 102, 1689, '平泉',         '夏：夏草'),
-  (3,  '閑さや 岩にしみ入る 蝉の声',         201, 103, 1689, '山形・立石寺', '夏：蝉'),
-  (4,  '初しぐれ 猿も小蓑を ほしげなり',     201, 104, NULL, '大津',         '冬：時雨'),
-  (5,  '冬隣 小屋の道具も 異動時期',         205, 105, 2024, '津軽',         '学習用ダミー（冬隣）'),
-  (6,  '目には青葉 山ほととぎす 初鰹',       202, 101, NULL, '江戸',         '※季語が複数入る例：実際は重複管理が必要'),
-  (7,  'やせ蛙 まけるな一茶 これにあり',     203, 101, NULL, '信州',         '蛙（励まし）'),
-  (8,  '柿くへば 鐘が鳴るなり 法隆寺',       204, NULL, 1895, '奈良',         '季語：柿（本デモでは未登録）');
+  (1,  '古池や 蛙飛びこむ 水の音',         201, 101, 1686, '江戸',        '春：蛙'),
+  (2,  '夏草や 兵どもが 夢の跡',             201, 102, 1689, '平泉',        '夏：夏草'),
+  (3,  '閑さや 岩にしみ入る 蝉の声',         201, 103, 1689, '山形・立石寺','夏：蝉'),
+  (4,  '初しぐれ 猿も小蓑を ほしげなり',     201, 104, NULL, '大津',        '冬：時雨'),
+  (5,  '冬隣 小屋の道具も 異動時期',         205, 105, 2024, '津軽',        '学習用ダミー（冬隣）'),
+  (6,  '目には青葉 山ほととぎす 初鰹',       202, 101, NULL, '江戸',        '※季語が複数入る例：実際は重複管理が必要'),
+  (7,  'やせ蛙 まけるな一茶 これにあり',     203, 101, NULL, '信州',        '蛙（励まし）'),
+  (8,  '柿くへば 鐘が鳴るなり 法隆寺',       204, NULL, 1895, '奈良',        '季語：柿（本デモでは未登録）');
 `;
 
       db.run('DROP TABLE IF EXISTS haiku;');
@@ -195,7 +215,8 @@ INSERT INTO haiku(id, text, author_id, kigo_id, year, place, note) VALUES
       db.run(schema);
       db.run(data);
 
-      schemaView.textContent = schema + '\n' + data;
+      schemaView.textContent = schema + '
+' + data;
     }
 
     // クエリ実行
@@ -275,7 +296,51 @@ INSERT INTO haiku(id, text, author_id, kigo_id, year, place, note) VALUES
       });
     });
 
-    // 追加スニペット
+    // かんたん検索ロジック
+    function runSQL(sql){ sqlInput.value = sql; runQuery(); }
+    function buildSearchSQL(q, type){
+      const esc = q.replace(/'/g, "''");
+      if(type === 'author'){
+        return `SELECT h.id, h.text AS haiku, a.name AS author
+FROM haiku h LEFT JOIN authors a ON h.author_id=a.id
+WHERE a.name LIKE '%${esc}%';`;
+      } else if(type === 'kigo'){
+        return `SELECT h.id, h.text AS haiku, a.name AS author, k.term AS kigo
+FROM haiku h LEFT JOIN authors a ON h.author_id=a.id
+LEFT JOIN kigo k ON h.kigo_id=k.id
+WHERE k.term LIKE '%${esc}%';`;
+      } else if(type === 'season'){
+        return `SELECT h.id, h.text AS haiku, a.name AS author, s.name AS season
+FROM haiku h LEFT JOIN authors a ON h.author_id=a.id
+LEFT JOIN kigo k ON h.kigo_id=k.id
+LEFT JOIN seasons s ON k.season_id=s.id
+WHERE s.name LIKE '%${esc}%';`;
+      } else { // text
+        return `SELECT h.id, h.text AS haiku, a.name AS author
+FROM haiku h LEFT JOIN authors a ON h.author_id=a.id
+WHERE h.text LIKE '%${esc}%';`;
+      }
+    }
+    const qInput = document.getElementById('qInput');
+    const qType  = document.getElementById('qType');
+    document.getElementById('qRun').addEventListener('click', () => {
+      const q = (qInput.value || '').trim(); if(!q) return; runSQL(buildSearchSQL(q, qType.value));
+    });
+    document.querySelectorAll('.chip').forEach(b => {
+      b.addEventListener('click', () => {
+        const q = b.getAttribute('data-q');
+        const t = b.getAttribute('data-type');
+        qInput.value = q; qType.value = t; runSQL(buildSearchSQL(q, t));
+      });
+    }); runQuery(); });
+    document.querySelectorAll('button[data-snippet]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sqlInput.value = btn.getAttribute('data-snippet');
+        runQuery();
+      });
+    });
+
+    // ★ 追加の俳句向けスニペットボタンを生成
     const extraSnippets = [
       { label: '作者別の句数', sql: `SELECT a.name AS author, COUNT(*) AS haiku_count
 FROM haiku h LEFT JOIN authors a ON h.author_id=a.id
