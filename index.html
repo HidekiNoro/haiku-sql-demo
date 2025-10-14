@@ -292,9 +292,12 @@ INSERT INTO haiku(id, text, author_id, kigo_id, year, place, note) VALUES
     document.getElementById('resetBtn').addEventListener('click', () => { seed(); runQuery(); });
     document.querySelectorAll('button[data-snippet]').forEach(btn => {
       btn.addEventListener('click', () => {
-        sqlInput.value = btn.getAttribute('data-snippet');
+        const raw = btn.getAttribute('data-snippet') || '';
+        const sql = raw.replace(/\\n/g, '\n').replace(/&#10;/g, '\n'); // エスケープされた改行を実際の改行へ
+        sqlInput.value = sql;
         runQuery();
       });
+    });
     });
 
     // かんたん検索ロジック
