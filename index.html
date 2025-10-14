@@ -25,7 +25,7 @@
     footer { margin-top: 2rem; opacity: .8; font-size: .9em; }
   </style>
   <!-- sql.js (SQLiteをWebAssemblyでブラウザ内実行) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js" integrity="sha512-s9mY2s2l4YyO1v9oR6d+8VfyP2QDu4QF7q6EnnQrdlt0gq1BIzQ7fWg9n1Q6o3b8rTgfsYwB6u+7LFOiDgRjYw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/sql-wasm.js"></script>
 </head>
 <body>
   <header>
@@ -94,7 +94,7 @@ ORDER BY h.id;`;`;
     const schemaView = el('schemaView');
 
     // sql.js 初期化（WASMの場所をCDNに指定）
-    initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${file}` })
+    initSqlJs({ locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${file}` })
       .then((SQLLib) => {
         SQL = SQLLib;
         db = new SQL.Database();
