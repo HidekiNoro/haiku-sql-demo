@@ -119,19 +119,32 @@ ORDER BY h.id;`;
     const schemaView = el('schemaView');
 
     // sql.js 初期化（WASMの場所をCDNに固定）
-    initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${f}` })
-      .then((SQLLib) => {
-        SQL = SQLLib;
-        db = new SQL.Database();
-        seed();
-        status.textContent = 'DB 初期化完了。サンプルデータ投入済み。';
-        sqlInput.value = DEFAULT_QUERY;
-        runQuery();
-      })
-      .catch((e) => {
-        console.error(e);
-        status.textContent = 'sql.js の読み込みに失敗しました。 ' + (e && e.message ? e.message : '');
-      });
+    (function(){
+      try {
+        if (typeof initSqlJs !== 'function') {
+          status.textContent = 'sql.js の読み込みに失敗：スクリプト未ロード（CDNブロック/順序）';
+          console.error('initSqlJs is not defined');
+          return;
+        }
+        status.textContent = 'sql.js を初期化中…';
+        initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${f}` })
+          .then((SQLLib) => {
+            SQL = SQLLib;
+            db = new SQL.Database();
+            seed();
+            status.textContent = 'DB 初期化完了。サンプルデータ投入済み。';
+            sqlInput.value = DEFAULT_QUERY;
+            runQuery();
+          })
+          .catch((e) => {
+            console.error('initSqlJs error', e);
+            status.textContent = 'sql.js の初期化エラー：' + (e && e.message ? e.message : '詳細はConsole');
+          });
+      } catch (e) {
+        console.error('outer init error', e);
+        status.textContent = '初期化で例外発生：' + (e && e.message ? e.message : '詳細はConsole');
+      }
+    })();
 
     // サンプルデータ投入（俳句用）
     function seed() {
@@ -293,7 +306,9 @@ INSERT INTO haiku(id, text, author_id, kigo_id, year, place, note) VALUES
     document.querySelectorAll('button[data-snippet]').forEach(btn => {
       btn.addEventListener('click', () => {
         const raw = btn.getAttribute('data-snippet') || '';
-        const sql = raw.replace(/\\n/g, '\n').replace(/&#10;/g, '\n'); // エスケープされた改行を実際の改行へ
+        const sql = raw.replace(/\n/g, '
+').replace(/&#10;/g, '
+'); // エスケープされた改行を実際の改行へ
         sqlInput.value = sql;
         runQuery();
       });
